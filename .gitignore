@@ -1,0 +1,32 @@
+node_modules
+
+# Environment files 
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+
+# Hardhat files
+/cache
+/artifacts
+
+# TypeChain files
+/typechain
+/typechain-types
+
+# solidity-coverage files
+/coverage
+/coverage.json
+
+# Hardhat Ignition default folder for deployments against a local node
+ignition/deployments/chain-31337
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# OS & editor files
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
