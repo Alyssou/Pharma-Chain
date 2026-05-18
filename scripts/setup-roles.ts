@@ -1,21 +1,7 @@
-/**
- * setup-roles.ts
- *
- * Use this script to grant roles on an already-deployed PharmaChain contract.
- * Useful when you need to re-run role assignment without redeploying.
- *
- * Usage:
- *   npx hardhat run scripts/setup-roles.ts --network sepolia
- *
- * Make sure CONTRACT_ADDRESS below matches your deployed contract.
- */
-
 import { ethers } from "hardhat";
 
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
-// Replace this with your deployed contract address
+
 const CONTRACT_ADDRESS = "0xE6727A99b90364a15290B97aFA0401dE2437ab27";
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function main() {
   // accounts[0] = manufacturer (deployer/admin)
@@ -37,14 +23,14 @@ async function main() {
   const PHARMACIST_ROLE   = await pharmaChain.PHARMACIST_ROLE();
   const ADMIN_ROLE        = await pharmaChain.DEFAULT_ADMIN_ROLE();
 
-  // ── Verify deployer is admin ───────────────────────────────────────────────
+  // Verify deployer is admin 
   const isAdmin = await pharmaChain.hasRole(ADMIN_ROLE, manufacturer.address);
   if (!isAdmin) {
     throw new Error(`${manufacturer.address} does not have DEFAULT_ADMIN_ROLE. Cannot grant roles.`);
   }
   console.log("✓ Admin role confirmed for deployer\n");
 
-  // ── Grant MANUFACTURER_ROLE ────────────────────────────────────────────────
+  // Grant MANUFACTURER_ROLE 
   if (!(await pharmaChain.hasRole(MANUFACTURER_ROLE, manufacturer.address))) {
     console.log("Granting MANUFACTURER_ROLE to:", manufacturer.address);
     const tx = await pharmaChain.connect(manufacturer).grantRole(MANUFACTURER_ROLE, manufacturer.address);
@@ -54,7 +40,7 @@ async function main() {
     console.log("  ⟳ MANUFACTURER_ROLE already set for:", manufacturer.address);
   }
 
-  // ── Grant DISTRIBUTOR_ROLE ─────────────────────────────────────────────────
+  // Grant DISTRIBUTOR_ROLE  
   if (!(await pharmaChain.hasRole(DISTRIBUTOR_ROLE, distributor.address))) {
     console.log("Granting DISTRIBUTOR_ROLE to: ", distributor.address);
     const tx = await pharmaChain.connect(manufacturer).grantRole(DISTRIBUTOR_ROLE, distributor.address);
@@ -64,7 +50,7 @@ async function main() {
     console.log("  ⟳ DISTRIBUTOR_ROLE already set for:", distributor.address);
   }
 
-  // ── Grant PHARMACIST_ROLE ──────────────────────────────────────────────────
+  // Grant PHARMACIST_ROLE  
   if (!(await pharmaChain.hasRole(PHARMACIST_ROLE, pharmacist.address))) {
     console.log("Granting PHARMACIST_ROLE to:  ", pharmacist.address);
     const tx = await pharmaChain.connect(manufacturer).grantRole(PHARMACIST_ROLE, pharmacist.address);
@@ -74,7 +60,7 @@ async function main() {
     console.log("  ⟳ PHARMACIST_ROLE already set for:", pharmacist.address);
   }
 
-  // ── Final Role Verification ────────────────────────────────────────────────
+  //  Final Role Verification 
   console.log("\n=== Role Verification ===");
   console.log("Manufacturer has MANUFACTURER_ROLE:", await pharmaChain.hasRole(MANUFACTURER_ROLE, manufacturer.address));
   console.log("Distributor  has DISTRIBUTOR_ROLE: ", await pharmaChain.hasRole(DISTRIBUTOR_ROLE,  distributor.address));

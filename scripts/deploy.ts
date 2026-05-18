@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  // Signers loaded from hardhat.config.ts accounts array (in order)
+  
   const [manufacturer, distributor, pharmacist] = await ethers.getSigners();
 
   console.log("=== PharmaChain Deployment ===");
@@ -9,8 +9,7 @@ async function main() {
   console.log("Distributor wallet:     ", distributor.address);
   console.log("Pharmacist wallet:      ", pharmacist.address);
   console.log("");
-
-  // ── 1. Deploy ──────────────────────────────────────────────────────────────
+  //  Deploy 
   console.log("Deploying PharmaChain...");
   const pharmaChain = await ethers.deployContract("PharmaChain");
   await pharmaChain.waitForDeployment();
@@ -19,7 +18,7 @@ async function main() {
   console.log(`PharmaChain deployed to: ${contractAddress}`);
   console.log("");
 
-  // ── 2. Grant Roles ─────────────────────────────────────────────────────────
+  //  Grant Roles 
   // The deployer (manufacturer[0]) is DEFAULT_ADMIN_ROLE and can grant roles.
   const MANUFACTURER_ROLE = await pharmaChain.MANUFACTURER_ROLE();
   const DISTRIBUTOR_ROLE  = await pharmaChain.DISTRIBUTOR_ROLE();
@@ -40,7 +39,6 @@ async function main() {
   await tx.wait();
   console.log("  ✓ PHARMACIST_ROLE granted");
 
-  // ── 3. Summary ─────────────────────────────────────────────────────────────
   console.log("");
   console.log("=== Deployment Complete ===");
   console.log(`Contract:     ${contractAddress}`);

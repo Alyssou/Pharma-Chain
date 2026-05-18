@@ -75,7 +75,7 @@ contract PharmaChain is AccessControl {
             revert("Unsupported status");
         }
 
-        // 3. Update the data (Gas optimized - writing to memory first)
+        // 3. Update the data 
         batch.currentOwner = _newOwner;
         batch.status = _newStatus;
         batch.timestamp = uint40(block.timestamp);

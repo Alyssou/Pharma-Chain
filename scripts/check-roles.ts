@@ -1,18 +1,12 @@
-/**
- * check-roles.ts
- *
+/*
  * Checks which addresses currently hold each role on the deployed contract.
  * Reads RoleGranted events from chain history to show the full role state.
- *
- * Usage:
- *   npx hardhat run scripts/check-roles.ts --network sepolia
  */
 
 import { ethers } from "hardhat";
 
-// ── Update if you have a newer deployment ────────────────────────────────────
+
 const CONTRACT_ADDRESS = "0xE6727A99b90364a15290B97aFA0401dE2437ab27";
-// ────────────────────────────────────────────────────────────────────────────
 
 async function main() {
   const [manufacturer, distributor, pharmacist] = await ethers.getSigners();
@@ -39,7 +33,7 @@ async function main() {
     console.log("✓ All 3 wallet addresses are distinct.\n");
   }
 
-  // ── Query the contract ────────────────────────────────────────────────────
+  // Query the contract 
   console.log("=== On-chain Role Check (contract:", CONTRACT_ADDRESS, ") ===");
   const pharmaChain = await ethers.getContractAt("PharmaChain", CONTRACT_ADDRESS);
 
@@ -62,7 +56,7 @@ async function main() {
   await checkAddress("accounts[1]", distributor.address);
   await checkAddress("accounts[2]", pharmacist.address);
 
-  // Also check the problem address explicitly
+
   const problemAddr = "0x40973875093214659619B39e8e5c364c9a32e61a";
   console.log("");
   console.log("=== Checking reported problem address ===");

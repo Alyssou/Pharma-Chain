@@ -1,17 +1,6 @@
-/**
- * generate-wallets.ts
- *
- * Generates 3 fresh, distinct wallets for each role.
- * Run with: npx hardhat run scripts/generate-wallets.ts
- * (No --network flag needed — runs locally)
- *
- * ⚠️  SAVE THE OUTPUT SOMEWHERE SAFE. These private keys will not be shown again.
- */
-
 import { ethers } from "hardhat";
 
 async function main() {
-  // ── Show current signers loaded from vars ──────────────────────────────────
   const signers = await ethers.getSigners();
   console.log("=== Current Signers (from your hardhat vars) ===");
   const labels = ["MANUFACTURER_PRIVATE_KEY", "DISTRIBUTOR_PRIVATE_KEY", "PHARMACIST_PRIVATE_KEY"];
@@ -21,7 +10,7 @@ async function main() {
 
   const uniqueAddresses = new Set(signers.slice(0, 3).map(s => s.address));
   if (uniqueAddresses.size < 3) {
-    console.log("\n⚠️  PROBLEM DETECTED: Multiple vars point to the same wallet address!");
+    console.log("\n PROBLEM DETECTED: Multiple vars point to the same wallet address!");
     console.log("   You need 3 distinct private keys. Generating fresh wallets below...\n");
   } else {
     console.log("\n✓ All 3 wallets are distinct. No action needed.\n");
