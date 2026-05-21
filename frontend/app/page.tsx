@@ -273,275 +273,347 @@ export default function HomePage() {
     }
   }
 
+  const STATUS_PILL: Record<number, string> = {
+    0: "bg-emerald-100 text-emerald-700",
+    1: "bg-blue-100 text-blue-700",
+    2: "bg-amber-100 text-amber-700",
+    3: "bg-violet-100 text-violet-700",
+  };
+
+  const TIMELINE_COLORS: Record<number, { dot: string; badge: string; label: string }> = {
+    0: { dot: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700", label: "Manufactured" },
+    1: { dot: "bg-blue-500",    badge: "bg-blue-100 text-blue-700",       label: "InTransit"    },
+    2: { dot: "bg-amber-500",   badge: "bg-amber-100 text-amber-700",     label: "Delivered"    },
+    3: { dot: "bg-violet-500",  badge: "bg-violet-100 text-violet-700",   label: "Sold"         },
+  };
+
   return (
-    <main className="mx-auto max-w-3xl space-y-6 p-6">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-semibold">Pharma Chain Dashboard</h1>
-          <Link href="/admin" className="text-xs text-slate-400 hover:text-slate-200">
-            Admin →
-          </Link>
-        </div>
-        <ConnectButton />
-      </header>
-
-      <section className="rounded-lg border border-slate-800 p-4">
-        <h2 className="mb-2 font-medium">Wallet</h2>
-        <p className="text-sm text-slate-300">
-          Address: {address ?? "Not connected"}
-        </p>
-        <p className="text-sm text-slate-300">
-          Balance: {balance ? `${formatEther(balance.value)} ETH` : "-"}
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-          <span className={`rounded px-2 py-1 ${isManufacturer ? "bg-emerald-700" : "bg-slate-700"}`}>
-            Manufacturer: {isManufacturer ? "yes" : "no"}
-          </span>
-          <span className={`rounded px-2 py-1 ${isDistributor ? "bg-emerald-700" : "bg-slate-700"}`}>
-            Distributor: {isDistributor ? "yes" : "no"}
-          </span>
-          <span className={`rounded px-2 py-1 ${isPharmacist ? "bg-emerald-700" : "bg-slate-700"}`}>
-            Pharmacist: {isPharmacist ? "yes" : "no"}
-          </span>
-        </div>
-        {txMessage && <p className="mt-2 text-xs text-emerald-300">{txMessage}</p>}
-        {errorMessage && <p className="mt-2 text-xs text-rose-300">{errorMessage}</p>}
-      </section>
-
-      <section className="rounded-lg border border-slate-800 p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-medium">All Batches</h2>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {/* Status filter */}
-            {(["all", 0, 1, 2, 3] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`rounded px-2 py-1 ${
-                  statusFilter === s ? "bg-slate-500 text-white" : "bg-slate-800 text-slate-400"
-                }`}
-              >
-                {s === "all" ? "All" : STATUS_LABEL[s]}
-              </button>
-            ))}
-            {/* Mine toggle */}
-            <button
-              onClick={() => setMineOnly((v) => !v)}
-              className={`rounded px-2 py-1 ${mineOnly ? "bg-indigo-700 text-white" : "bg-slate-800 text-slate-400"}`}
-            >
-              Mine only
-            </button>
-          </div>
-        </div>
-
-        {(() => {
-          const filtered = allBatches.filter((b) => {
-            if (statusFilter !== "all" && b.status !== statusFilter) return false;
-            if (mineOnly && b.actor.toLowerCase() !== connectedAddress) return false;
-            return true;
-          });
-
-          if (filtered.length === 0) {
-            return (
-              <p className="text-sm text-slate-400">
-                {allBatches.length === 0
-                  ? "No batches found in the last 10 000 blocks."
-                  : "No batches match the current filter."}
-              </p>
-            );
-          }
-
-          return (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="border-b border-slate-700 text-slate-500">
-                  <tr>
-                    <th className="pb-2 pr-4">Batch ID</th>
-                    <th className="pb-2 pr-4">Status</th>
-                    <th className="pb-2 pr-4">Last Actor</th>
-                    <th className="pb-2">Last Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((b) => {
-                    const statusColors: Record<number, string> = {
-                      0: "text-emerald-400",
-                      1: "text-blue-400",
-                      2: "text-yellow-400",
-                      3: "text-purple-400",
-                    };
-                    const isSelected = batchIdInput === String(b.batchId);
-                    return (
-                      <tr
-                        key={String(b.batchId)}
-                        onClick={() => setBatchIdInput(String(b.batchId))}
-                        className={`cursor-pointer border-b border-slate-800 hover:bg-slate-800 ${
-                          isSelected ? "bg-slate-800" : ""
-                        }`}
-                      >
-                        <td className="py-2 pr-4 font-mono font-semibold">
-                          #{String(b.batchId)}
-                        </td>
-                        <td className={`py-2 pr-4 font-medium ${statusColors[b.status] ?? "text-slate-300"}`}>
-                          {STATUS_LABEL[b.status] ?? b.status}
-                        </td>
-                        <td className="py-2 pr-4 font-mono text-slate-400">
-                          {b.actor.slice(0, 6)}…{b.actor.slice(-4)}
-                        </td>
-                        <td className="py-2 text-slate-500">
-                          {new Date(b.time * 1000).toLocaleDateString(undefined, {
-                            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                          })}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+    <div className="min-h-screen bg-gray-50">
+      {/* Sticky top nav */}
+      <nav className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-3">
+          <div className="flex items-center gap-5">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold text-indigo-600">Pharma Chain</span>
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-500">
+                Sepolia
+              </span>
             </div>
-          );
-        })()}
-      </section>
+            <Link
+              href="/admin"
+              className="text-sm text-gray-400 transition-colors hover:text-indigo-600"
+            >
+              Admin →
+            </Link>
+          </div>
+          <ConnectButton />
+        </div>
+      </nav>
 
-      <section className="rounded-lg border border-slate-800 p-4">
-        <h2 className="mb-3 font-medium">Manufacture Batch</h2>
-        <form className="flex flex-col gap-3" onSubmit={onManufacture}>
-          <input
-            placeholder="Batch ID"
-            value={batchIdInput}
-            onChange={(e) => setBatchIdInput(e.target.value)}
-          />
-          <input
-            placeholder="Medicine Name"
-            value={medicineName}
-            onChange={(e) => setMedicineName(e.target.value)}
-          />
-          <button type="submit" disabled={!isConnected || isPending || !isManufacturer}>
-            Create Batch
-          </button>
-        </form>
-      </section>
+      <main className="mx-auto max-w-4xl space-y-5 px-6 py-6">
 
-      <section className="rounded-lg border border-slate-800 p-4">
-        <h2 className="mb-3 font-medium">Transfer Batch</h2>
-        <form className="flex flex-col gap-3" onSubmit={onTransfer}>
-          <input
-            placeholder="New owner address"
-            value={newOwner}
-            onChange={(e) => setNewOwner(e.target.value)}
-          />
-          <select
-            value={newStatus}
-            onChange={(e) => setNewStatus(e.target.value)}
-            disabled={!canTransfer}
-          >
-            {transferOptions.length === 0 ? (
-              <option value="">No valid transitions</option>
-            ) : (
-              transferOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))
-            )}
-          </select>
-          {canTransfer ? (
-            <p className="text-xs text-slate-400">
-              {transferOptions.find((option) => option.value === Number(newStatus))?.recipientHint}
-            </p>
-          ) : (
-            <p className="text-xs text-amber-300">
-              Transfer disabled: wallet must be the current owner with the matching role for the next lifecycle step.
+        {/* ── Wallet card ── */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Wallet
+          </h2>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-sm text-gray-600">
+                <span className="text-gray-400">Address </span>
+                <span className="font-mono text-gray-800">{address ?? "Not connected"}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                <span className="text-gray-400">Balance </span>
+                {balance ? `${formatEther(balance.value)} ETH` : "—"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isManufacturer ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"}`}>
+                Manufacturer
+              </span>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isDistributor ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-400"}`}>
+                Distributor
+              </span>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isPharmacist ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-400"}`}>
+                Pharmacist
+              </span>
+            </div>
+          </div>
+          {txMessage && (
+            <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              {txMessage}
             </p>
           )}
-          <button type="submit" disabled={!isConnected || isPending || !canTransfer}>
-            Transfer Batch
-          </button>
-        </form>
-      </section>
-
-      <section className="rounded-lg border border-slate-800 p-4">
-        <h2 className="mb-3 font-medium">Batch Snapshot</h2>
-        {!batchData ? (
-          <p className="text-sm text-slate-300">No data yet. Connect and load a batch ID.</p>
-        ) : (
-          <div className="space-y-1 text-sm text-slate-300">
-            <p>Name: {hexToString(batchData[0], { size: 32 }).replace(/\0/g, "") || batchData[0]}</p>
-            <p>Current owner: {batchData[1]}</p>
-            <p>
-              Status: {Number(batchData[2])} - {STATUS_LABEL[Number(batchData[2])] ?? "Unknown"}
+          {errorMessage && (
+            <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              {errorMessage}
             </p>
-            <p>Timestamp: {Number(batchData[3])}</p>
+          )}
+        </section>
+
+        {/* ── All Batches ── */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              All Batches
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {(["all", 0, 1, 2, 3] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    statusFilter === s
+                      ? "border-indigo-200 bg-indigo-600 text-white shadow-none"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {s === "all" ? "All" : STATUS_LABEL[s]}
+                </button>
+              ))}
+              <button
+                onClick={() => setMineOnly((v) => !v)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  mineOnly
+                    ? "border-indigo-200 bg-indigo-600 text-white shadow-none"
+                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Mine only
+              </button>
+            </div>
           </div>
-        )}
-      </section>
 
-      <section className="rounded-lg border border-slate-800 p-4">
-        <h2 className="mb-4 font-medium">Batch History Timeline</h2>
-        {events.length === 0 ? (
-          <p className="text-sm text-slate-400">No events found for this batch ID yet.</p>
-        ) : (
-          <ol className="relative border-l border-slate-700 ml-3 space-y-0">
-            {[...events].reverse().map((event, index) => {
-              const statusColors: Record<number, { dot: string; badge: string; label: string }> = {
-                0: { dot: "bg-emerald-400", badge: "bg-emerald-900 text-emerald-300", label: "Manufactured" },
-                1: { dot: "bg-blue-400",    badge: "bg-blue-900 text-blue-300",       label: "InTransit"    },
-                2: { dot: "bg-yellow-400",  badge: "bg-yellow-900 text-yellow-300",   label: "Delivered"    },
-                3: { dot: "bg-purple-400",  badge: "bg-purple-900 text-purple-300",   label: "Sold"         },
-              };
-              const color = statusColors[event.status] ?? {
-                dot: "bg-slate-400", badge: "bg-slate-700 text-slate-300", label: "Unknown"
-              };
-              const date = new Date(event.time * 1000);
-              const formattedDate = date.toLocaleDateString(undefined, {
-                year: "numeric", month: "short", day: "numeric",
-              });
-              const formattedTime = date.toLocaleTimeString(undefined, {
-                hour: "2-digit", minute: "2-digit", second: "2-digit",
-              });
-              const shortActor = `${event.actor.slice(0, 6)}...${event.actor.slice(-4)}`;
-              const shortTx = `${event.txHash.slice(0, 10)}...${event.txHash.slice(-6)}`;
+          {(() => {
+            const filtered = allBatches.filter((b) => {
+              if (statusFilter !== "all" && b.status !== statusFilter) return false;
+              if (mineOnly && b.actor.toLowerCase() !== connectedAddress) return false;
+              return true;
+            });
 
+            if (filtered.length === 0) {
               return (
-                <li key={`${event.txHash}-${event.time}`} className="mb-6 ml-6">
-                  {/* Timeline dot */}
-                  <span className={`absolute -left-[9px] flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-slate-900 ${color.dot}`} />
-
-                  {/* Card */}
-                  <div className="rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm">
-                    {/* Header row */}
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${color.badge}`}>
-                        Step {index + 1} — {color.label}
-                      </span>
-                      <span className="text-xs text-slate-500">{formattedDate} · {formattedTime}</span>
-                    </div>
-
-                    {/* Actor */}
-                    <p className="mt-2 text-slate-400">
-                      <span className="text-slate-500">Actor: </span>
-                      <span className="font-mono text-slate-300">{shortActor}</span>
-                    </p>
-
-                    {/* Tx hash — links to Sepolia Etherscan */}
-                    <p className="mt-1 text-slate-400">
-                      <span className="text-slate-500">Tx: </span>
-                      <a
-                        href={`https://sepolia.etherscan.io/tx/${event.txHash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-blue-400 underline hover:text-blue-300"
-                      >
-                        {shortTx}
-                      </a>
-                    </p>
-                  </div>
-                </li>
+                <p className="text-sm text-gray-400">
+                  {allBatches.length === 0
+                    ? "No batches found in the last 10 000 blocks."
+                    : "No batches match the current filter."}
+                </p>
               );
-            })}
-          </ol>
-        )}
-      </section>
-    </main>
+            }
+
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-gray-100 text-gray-400">
+                    <tr>
+                      <th className="pb-2 pr-4 font-medium">Batch ID</th>
+                      <th className="pb-2 pr-4 font-medium">Status</th>
+                      <th className="pb-2 pr-4 font-medium">Last Actor</th>
+                      <th className="pb-2 font-medium">Last Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((b) => {
+                      const isSelected = batchIdInput === String(b.batchId);
+                      return (
+                        <tr
+                          key={String(b.batchId)}
+                          onClick={() => setBatchIdInput(String(b.batchId))}
+                          className={`cursor-pointer border-b border-gray-50 transition-colors hover:bg-indigo-50 ${
+                            isSelected ? "bg-indigo-50" : ""
+                          }`}
+                        >
+                          <td className="py-2.5 pr-4 font-mono font-semibold text-gray-800">
+                            #{String(b.batchId)}
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_PILL[b.status] ?? "bg-gray-100 text-gray-600"}`}>
+                              {STATUS_LABEL[b.status] ?? b.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 pr-4 font-mono text-gray-500">
+                            {b.actor.slice(0, 6)}…{b.actor.slice(-4)}
+                          </td>
+                          <td className="py-2.5 text-gray-400">
+                            {new Date(b.time * 1000).toLocaleDateString(undefined, {
+                              month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </section>
+
+        {/* ── Manufacture + Transfer side-by-side ── */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Manufacture Batch
+            </h2>
+            <form className="flex flex-col gap-3" onSubmit={onManufacture}>
+              <input
+                placeholder="Batch ID"
+                value={batchIdInput}
+                onChange={(e) => setBatchIdInput(e.target.value)}
+              />
+              <input
+                placeholder="Medicine Name"
+                value={medicineName}
+                onChange={(e) => setMedicineName(e.target.value)}
+              />
+              <button
+                type="submit"
+                disabled={!isConnected || isPending || !isManufacturer}
+                className="border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {isPending ? "Submitting…" : "Create Batch"}
+              </button>
+            </form>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Transfer Batch
+            </h2>
+            <form className="flex flex-col gap-3" onSubmit={onTransfer}>
+              <input
+                placeholder="Recipient address (0x…)"
+                value={newOwner}
+                onChange={(e) => setNewOwner(e.target.value)}
+              />
+              <select
+                value={newStatus}
+                onChange={(e) => setNewStatus(e.target.value)}
+                disabled={!canTransfer}
+              >
+                {transferOptions.length === 0 ? (
+                  <option value="">No valid transitions</option>
+                ) : (
+                  transferOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))
+                )}
+              </select>
+              {canTransfer ? (
+                <p className="text-xs text-gray-400">
+                  {transferOptions.find((o) => o.value === Number(newStatus))?.recipientHint}
+                </p>
+              ) : (
+                <p className="text-xs text-amber-600">
+                  You must be the current owner with the correct role to transfer.
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={!isConnected || isPending || !canTransfer}
+                className="border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {isPending ? "Submitting…" : "Transfer Batch"}
+              </button>
+            </form>
+          </section>
+        </div>
+
+        {/* ── Batch Snapshot ── */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Batch Snapshot — #{batchIdInput}
+          </h2>
+          {!batchData || Number(batchData[3]) === 0 ? (
+            <p className="text-sm text-gray-400">No data. Select a batch or enter an ID above.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {[
+                { label: "Name", value: hexToString(batchData[0], { size: 32 }).replace(/\0/g, "") || "—" },
+                { label: "Owner", value: `${String(batchData[1]).slice(0, 6)}…${String(batchData[1]).slice(-4)}` },
+                {
+                  label: "Status",
+                  value: (
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_PILL[Number(batchData[2])] ?? "bg-gray-100 text-gray-600"}`}>
+                      {STATUS_LABEL[Number(batchData[2])] ?? "Unknown"}
+                    </span>
+                  ),
+                },
+                {
+                  label: "Last Update",
+                  value: new Date(Number(batchData[3]) * 1000).toLocaleString(undefined, {
+                    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                  }),
+                },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-lg bg-gray-50 px-4 py-3">
+                  <p className="mb-1 text-xs text-gray-400">{label}</p>
+                  <div className="text-sm font-medium text-gray-800">{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── Timeline ── */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Batch History Timeline
+          </h2>
+          {events.length === 0 ? (
+            <p className="text-sm text-gray-400">No events found for this batch ID yet.</p>
+          ) : (
+            <ol className="relative ml-3 border-l-2 border-gray-100">
+              {[...events].reverse().map((event, index) => {
+                const color = TIMELINE_COLORS[event.status] ?? {
+                  dot: "bg-gray-400", badge: "bg-gray-100 text-gray-600", label: "Unknown",
+                };
+                const date = new Date(event.time * 1000);
+                const formattedDate = date.toLocaleDateString(undefined, {
+                  year: "numeric", month: "short", day: "numeric",
+                });
+                const formattedTime = date.toLocaleTimeString(undefined, {
+                  hour: "2-digit", minute: "2-digit", second: "2-digit",
+                });
+
+                return (
+                  <li key={`${event.txHash}-${event.time}`} className="mb-5 ml-6">
+                    <span className={`absolute -left-[9px] h-4 w-4 rounded-full ring-4 ring-white ${color.dot}`} />
+                    <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${color.badge}`}>
+                          Step {index + 1} — {color.label}
+                        </span>
+                        <span className="text-xs text-gray-400">{formattedDate} · {formattedTime}</span>
+                      </div>
+                      <p className="mt-2 text-gray-500">
+                        Actor{" "}
+                        <span className="font-mono text-gray-700">
+                          {event.actor.slice(0, 6)}…{event.actor.slice(-4)}
+                        </span>
+                      </p>
+                      <p className="mt-1 text-gray-500">
+                        Tx{" "}
+                        <a
+                          href={`https://sepolia.etherscan.io/tx/${event.txHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-indigo-500 underline hover:text-indigo-700"
+                        >
+                          {event.txHash.slice(0, 10)}…{event.txHash.slice(-6)}
+                        </a>
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </section>
+      </main>
+    </div>
   );
 }

@@ -3,15 +3,14 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-950 text-slate-100;
+  @apply bg-gray-50 text-gray-900 antialiased;
 }
 
 input,
-select,
-button {
-  @apply rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm;
+select {
+  @apply rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100;
 }
 
 button {
-  @apply hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60;
+  @apply rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50;
 }
