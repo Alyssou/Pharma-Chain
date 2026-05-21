@@ -54,6 +54,7 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [events, setEvents] = useState<BatchEvent[]>([]);
   const [allBatches, setAllBatches] = useState<BatchSummary[]>([]);
+  const [rawLogs, setRawLogs] = useState<{ txHash: string; batchId: string; actor: string; status: number; time: number }[]>([]);
   const [statusFilter, setStatusFilter] = useState<number | "all">("all");
   const [mineOnly, setMineOnly] = useState(false);
   const [logsError, setLogsError] = useState<string>("");
@@ -141,99 +142,79 @@ export default function HomePage() {
     }
   }, [transferOptions]);
 
-  // Query logs in paginated 9 999-block chunks going backwards.
-  // Infura/MetaMask cap single requests at 10 000 blocks; this works around it
-  // by running several smaller queries and merging the results.
-  async function getLogsPaginated(
-    params: { address?: `0x${string}`; event?: unknown; args?: unknown },
-    maxChunks = 10
-  ) {
-    if (!publicClient) return [];
-    const CHUNK = 9_999n;
-    const latest = await publicClient.getBlockNumber();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const all: any[] = [];
-    for (let i = 0; i < maxChunks; i++) {
-      const toBlock = latest - BigInt(i) * CHUNK;
-      const fromBlock = toBlock > CHUNK ? toBlock - CHUNK : 0n;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const chunk = await (publicClient.getLogs as any)({ ...params, fromBlock, toBlock });
-        all.push(...chunk);
-      } catch {
-        break;
-      }
-      if (fromBlock === 0n) break;
-    }
-    return all;
-  }
-
+  // Single paginated fetch for ALL BatchUpdated events — no args filter so no
+  // RPC topic-encoding issues. Both the dashboard and the timeline derive from this.
   useEffect(() => {
-    async function loadEvents() {
+    async function loadAllLogs() {
       if (!publicClient) return;
       setLogsError("");
       try {
         const batchUpdatedEvent = pharmaChainAbi.find(
           (item) => item.type === "event" && item.name === "BatchUpdated"
         )!;
-        const logs = await getLogsPaginated({
-          address: pharmaChainAddress,
-          event: batchUpdatedEvent,
-          args: { batchId },
-        });
-        type TypedLog = { transactionHash: string | null; args: { actor: unknown; status: unknown; time: unknown } };
-        const mapped = (logs as unknown as TypedLog[])
-          .slice(-10)
-          .reverse()
-          .map((log) => ({
-            txHash: log.transactionHash ?? "",
-            actor: String(log.args.actor),
-            status: Number(log.args.status),
-            time: Number(log.args.time),
-          }));
-        setEvents(mapped);
-      } catch (err) {
-        console.error("[pharma-chain] Failed to load batch events:", err);
-        setLogsError("Could not load events. Try switching MetaMask Sepolia RPC to https://rpc.sepolia.org");
-        setEvents([]);
-      }
-    }
-    void loadEvents();
-  }, [batchId, publicClient]);
+        const CHUNK = 9_999n;
+        const latest = await publicClient.getBlockNumber();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const all: any[] = [];
+        for (let i = 0; i < 15; i++) {
+          const toBlock = latest - BigInt(i) * CHUNK;
+          const fromBlock = toBlock > CHUNK ? toBlock - CHUNK : 0n;
+          try {
+            const chunk = await publicClient.getLogs({
+              address: pharmaChainAddress,
+              event: batchUpdatedEvent,
+              fromBlock,
+              toBlock,
+            });
+            all.push(...chunk);
+          } catch {
+            break;
+          }
+          if (fromBlock === 0n) break;
+        }
 
-  useEffect(() => {
-    async function loadAllBatches() {
-      if (!publicClient) return;
-      try {
-        const batchUpdatedEvent = pharmaChainAbi.find(
-          (item) => item.type === "event" && item.name === "BatchUpdated"
-        )!;
-        const logs = await getLogsPaginated({
-          address: pharmaChainAddress,
-          event: batchUpdatedEvent,
-        });
-        type TypedBatchLog = { args: { batchId: unknown; status: unknown; actor: unknown; time: unknown } };
+        type RawLog = { transactionHash: string | null; args: { batchId: unknown; actor: unknown; status: unknown; time: unknown } };
+        const parsed = (all as unknown as RawLog[]).map((log) => ({
+          txHash: log.transactionHash ?? "",
+          batchId: String(log.args.batchId),
+          actor: String(log.args.actor),
+          status: Number(log.args.status),
+          time: Number(log.args.time),
+        }));
+
+        setRawLogs(parsed);
+
+        // Build dashboard summary (latest event per batchId)
         const map = new Map<string, BatchSummary>();
-        for (const log of logs as unknown as TypedBatchLog[]) {
-          const key = String(log.args.batchId);
-          const time = Number(log.args.time);
-          const existing = map.get(key);
-          if (!existing || time > existing.time) {
-            map.set(key, {
-              batchId: log.args.batchId as bigint,
-              status: Number(log.args.status),
-              actor: String(log.args.actor),
-              time,
+        for (const entry of parsed) {
+          const existing = map.get(entry.batchId);
+          if (!existing || entry.time > existing.time) {
+            map.set(entry.batchId, {
+              batchId: BigInt(entry.batchId),
+              status: entry.status,
+              actor: entry.actor,
+              time: entry.time,
             });
           }
         }
         setAllBatches(Array.from(map.values()).sort((a, b) => b.time - a.time));
-      } catch {
-        // silently keep empty list
+      } catch (err) {
+        console.error("[pharma-chain] Failed to load logs:", err);
+        setLogsError("Could not load on-chain events. Try switching MetaMask Sepolia RPC to https://rpc.sepolia.org");
       }
     }
-    void loadAllBatches();
+    void loadAllLogs();
   }, [publicClient]);
+
+  // Derive per-batch timeline from rawLogs whenever batchId changes
+  useEffect(() => {
+    const filtered = rawLogs
+      .filter((log) => log.batchId === String(batchId))
+      .sort((a, b) => a.time - b.time)
+      .slice(-10)
+      .reverse();
+    setEvents(filtered);
+  }, [batchId, rawLogs]);
 
   async function onManufacture(e: FormEvent) {
     e.preventDefault();
