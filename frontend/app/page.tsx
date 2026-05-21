@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { formatEther, hexToString, isAddress, toHex } from "viem";
 import {
@@ -16,6 +17,13 @@ type BatchEvent = {
   txHash: string;
   actor: string;
   status: number;
+  time: number;
+};
+
+type BatchSummary = {
+  batchId: bigint;
+  status: number;
+  actor: string;
   time: number;
 };
 
@@ -45,6 +53,9 @@ export default function HomePage() {
   const [txMessage, setTxMessage] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [events, setEvents] = useState<BatchEvent[]>([]);
+  const [allBatches, setAllBatches] = useState<BatchSummary[]>([]);
+  const [statusFilter, setStatusFilter] = useState<number | "all">("all");
+  const [mineOnly, setMineOnly] = useState(false);
 
   const batchId = useMemo(() => BigInt(batchIdInput || "0"), [batchIdInput]);
 
@@ -172,6 +183,48 @@ export default function HomePage() {
     void loadEvents();
   }, [batchId, publicClient]);
 
+  useEffect(() => {
+    async function loadAllBatches() {
+      if (!publicClient) return;
+      try {
+        const batchUpdatedEvent = pharmaChainAbi.find(
+          (item) => item.type === "event" && item.name === "BatchUpdated"
+        )!;
+        const latestBlock = await publicClient.getBlockNumber();
+        const fromBlock = latestBlock > 9_999n ? latestBlock - 9_999n : 0n;
+
+        const logs = await publicClient.getLogs({
+          address: pharmaChainAddress,
+          event: batchUpdatedEvent,
+          fromBlock,
+          toBlock: "latest",
+        });
+
+        // Keep only the latest event per batchId
+        const map = new Map<string, BatchSummary>();
+        for (const log of logs) {
+          const key = String(log.args.batchId);
+          const time = Number(log.args.time);
+          const existing = map.get(key);
+          if (!existing || time > existing.time) {
+            map.set(key, {
+              batchId: log.args.batchId as bigint,
+              status: Number(log.args.status),
+              actor: String(log.args.actor),
+              time,
+            });
+          }
+        }
+        setAllBatches(
+          Array.from(map.values()).sort((a, b) => b.time - a.time)
+        );
+      } catch (err) {
+        console.error("[pharma-chain] Failed to load batch list:", err);
+      }
+    }
+    void loadAllBatches();
+  }, [publicClient]);
+
   async function onManufacture(e: FormEvent) {
     e.preventDefault();
     setErrorMessage("");
@@ -223,7 +276,12 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Pharma Chain Dashboard</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-semibold">Pharma Chain Dashboard</h1>
+          <Link href="/admin" className="text-xs text-slate-400 hover:text-slate-200">
+            Admin →
+          </Link>
+        </div>
         <ConnectButton />
       </header>
 
@@ -248,6 +306,101 @@ export default function HomePage() {
         </div>
         {txMessage && <p className="mt-2 text-xs text-emerald-300">{txMessage}</p>}
         {errorMessage && <p className="mt-2 text-xs text-rose-300">{errorMessage}</p>}
+      </section>
+
+      <section className="rounded-lg border border-slate-800 p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-medium">All Batches</h2>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* Status filter */}
+            {(["all", 0, 1, 2, 3] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`rounded px-2 py-1 ${
+                  statusFilter === s ? "bg-slate-500 text-white" : "bg-slate-800 text-slate-400"
+                }`}
+              >
+                {s === "all" ? "All" : STATUS_LABEL[s]}
+              </button>
+            ))}
+            {/* Mine toggle */}
+            <button
+              onClick={() => setMineOnly((v) => !v)}
+              className={`rounded px-2 py-1 ${mineOnly ? "bg-indigo-700 text-white" : "bg-slate-800 text-slate-400"}`}
+            >
+              Mine only
+            </button>
+          </div>
+        </div>
+
+        {(() => {
+          const filtered = allBatches.filter((b) => {
+            if (statusFilter !== "all" && b.status !== statusFilter) return false;
+            if (mineOnly && b.actor.toLowerCase() !== connectedAddress) return false;
+            return true;
+          });
+
+          if (filtered.length === 0) {
+            return (
+              <p className="text-sm text-slate-400">
+                {allBatches.length === 0
+                  ? "No batches found in the last 10 000 blocks."
+                  : "No batches match the current filter."}
+              </p>
+            );
+          }
+
+          return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="border-b border-slate-700 text-slate-500">
+                  <tr>
+                    <th className="pb-2 pr-4">Batch ID</th>
+                    <th className="pb-2 pr-4">Status</th>
+                    <th className="pb-2 pr-4">Last Actor</th>
+                    <th className="pb-2">Last Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((b) => {
+                    const statusColors: Record<number, string> = {
+                      0: "text-emerald-400",
+                      1: "text-blue-400",
+                      2: "text-yellow-400",
+                      3: "text-purple-400",
+                    };
+                    const isSelected = batchIdInput === String(b.batchId);
+                    return (
+                      <tr
+                        key={String(b.batchId)}
+                        onClick={() => setBatchIdInput(String(b.batchId))}
+                        className={`cursor-pointer border-b border-slate-800 hover:bg-slate-800 ${
+                          isSelected ? "bg-slate-800" : ""
+                        }`}
+                      >
+                        <td className="py-2 pr-4 font-mono font-semibold">
+                          #{String(b.batchId)}
+                        </td>
+                        <td className={`py-2 pr-4 font-medium ${statusColors[b.status] ?? "text-slate-300"}`}>
+                          {STATUS_LABEL[b.status] ?? b.status}
+                        </td>
+                        <td className="py-2 pr-4 font-mono text-slate-400">
+                          {b.actor.slice(0, 6)}…{b.actor.slice(-4)}
+                        </td>
+                        <td className="py-2 text-slate-500">
+                          {new Date(b.time * 1000).toLocaleDateString(undefined, {
+                            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </section>
 
       <section className="rounded-lg border border-slate-800 p-4">
