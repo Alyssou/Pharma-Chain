@@ -141,49 +141,62 @@ export default function HomePage() {
     }
   }, [transferOptions]);
 
+  // Query logs in paginated 9 999-block chunks going backwards.
+  // Infura/MetaMask cap single requests at 10 000 blocks; this works around it
+  // by running several smaller queries and merging the results.
+  async function getLogsPaginated(
+    params: { address?: `0x${string}`; event?: unknown; args?: unknown },
+    maxChunks = 10
+  ) {
+    if (!publicClient) return [];
+    const CHUNK = 9_999n;
+    const latest = await publicClient.getBlockNumber();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const all: any[] = [];
+    for (let i = 0; i < maxChunks; i++) {
+      const toBlock = latest - BigInt(i) * CHUNK;
+      const fromBlock = toBlock > CHUNK ? toBlock - CHUNK : 0n;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const chunk = await (publicClient.getLogs as any)({ ...params, fromBlock, toBlock });
+        all.push(...chunk);
+      } catch {
+        break;
+      }
+      if (fromBlock === 0n) break;
+    }
+    return all;
+  }
+
   useEffect(() => {
     async function loadEvents() {
       if (!publicClient) return;
       setLogsError("");
-      const batchUpdatedEvent = pharmaChainAbi.find(
-        (item) => item.type === "event" && item.name === "BatchUpdated"
-      )!;
-      const latestBlock = await publicClient.getBlockNumber();
-      let logs: Awaited<ReturnType<typeof publicClient.getLogs>> = [];
-      let lastErr: unknown;
-      for (const lookback of [100_000n, 50_000n, 10_000n]) {
-        try {
-          const fromBlock = latestBlock > lookback ? latestBlock - lookback : 0n;
-          logs = await publicClient.getLogs({
-            address: pharmaChainAddress,
-            event: batchUpdatedEvent,
-            args: { batchId },
-            fromBlock,
-            toBlock: "latest",
-          });
-          lastErr = undefined;
-          break;
-        } catch (err) {
-          lastErr = err;
-        }
-      }
-      if (lastErr) {
-        console.error("[pharma-chain] Failed to load batch events:", lastErr);
-        setLogsError("RPC rejected all block ranges. In MetaMask → Settings → Networks → Sepolia, change the RPC URL to https://rpc.sepolia.org");
+      try {
+        const batchUpdatedEvent = pharmaChainAbi.find(
+          (item) => item.type === "event" && item.name === "BatchUpdated"
+        )!;
+        const logs = await getLogsPaginated({
+          address: pharmaChainAddress,
+          event: batchUpdatedEvent,
+          args: { batchId },
+        });
+        type TypedLog = { transactionHash: string | null; args: { actor: unknown; status: unknown; time: unknown } };
+        const mapped = (logs as unknown as TypedLog[])
+          .slice(-10)
+          .reverse()
+          .map((log) => ({
+            txHash: log.transactionHash ?? "",
+            actor: String(log.args.actor),
+            status: Number(log.args.status),
+            time: Number(log.args.time),
+          }));
+        setEvents(mapped);
+      } catch (err) {
+        console.error("[pharma-chain] Failed to load batch events:", err);
+        setLogsError("Could not load events. Try switching MetaMask Sepolia RPC to https://rpc.sepolia.org");
         setEvents([]);
-        return;
       }
-      type TypedLog = { transactionHash: string | null; args: { actor: unknown; status: unknown; time: unknown } };
-      const mapped = (logs as unknown as TypedLog[])
-        .slice(-10)
-        .reverse()
-        .map((log) => ({
-          txHash: log.transactionHash ?? "",
-          actor: String(log.args.actor),
-          status: Number(log.args.status),
-          time: Number(log.args.time),
-        }));
-      setEvents(mapped);
     }
     void loadEvents();
   }, [batchId, publicClient]);
@@ -191,41 +204,33 @@ export default function HomePage() {
   useEffect(() => {
     async function loadAllBatches() {
       if (!publicClient) return;
-      const batchUpdatedEvent = pharmaChainAbi.find(
-        (item) => item.type === "event" && item.name === "BatchUpdated"
-      )!;
-      const latestBlock = await publicClient.getBlockNumber();
-      let logs: Awaited<ReturnType<typeof publicClient.getLogs>> = [];
-      for (const lookback of [100_000n, 50_000n, 10_000n]) {
-        try {
-          const fromBlock = latestBlock > lookback ? latestBlock - lookback : 0n;
-          logs = await publicClient.getLogs({
-            address: pharmaChainAddress,
-            event: batchUpdatedEvent,
-            fromBlock,
-            toBlock: "latest",
-          });
-          break;
-        } catch {
-          // try smaller range
+      try {
+        const batchUpdatedEvent = pharmaChainAbi.find(
+          (item) => item.type === "event" && item.name === "BatchUpdated"
+        )!;
+        const logs = await getLogsPaginated({
+          address: pharmaChainAddress,
+          event: batchUpdatedEvent,
+        });
+        type TypedBatchLog = { args: { batchId: unknown; status: unknown; actor: unknown; time: unknown } };
+        const map = new Map<string, BatchSummary>();
+        for (const log of logs as unknown as TypedBatchLog[]) {
+          const key = String(log.args.batchId);
+          const time = Number(log.args.time);
+          const existing = map.get(key);
+          if (!existing || time > existing.time) {
+            map.set(key, {
+              batchId: log.args.batchId as bigint,
+              status: Number(log.args.status),
+              actor: String(log.args.actor),
+              time,
+            });
+          }
         }
+        setAllBatches(Array.from(map.values()).sort((a, b) => b.time - a.time));
+      } catch {
+        // silently keep empty list
       }
-      type TypedBatchLog = { args: { batchId: unknown; status: unknown; actor: unknown; time: unknown } };
-      const map = new Map<string, BatchSummary>();
-      for (const log of logs as unknown as TypedBatchLog[]) {
-        const key = String(log.args.batchId);
-        const time = Number(log.args.time);
-        const existing = map.get(key);
-        if (!existing || time > existing.time) {
-          map.set(key, {
-            batchId: log.args.batchId as bigint,
-            status: Number(log.args.status),
-            actor: String(log.args.actor),
-            time,
-          });
-        }
-      }
-      setAllBatches(Array.from(map.values()).sort((a, b) => b.time - a.time));
     }
     void loadAllBatches();
   }, [publicClient]);
@@ -401,7 +406,7 @@ export default function HomePage() {
               return (
                 <p className="text-sm text-gray-400">
                   {allBatches.length === 0
-                    ? "No batches found in the last 10 000 blocks."
+                    ? "No batches found. Make sure your wallet is connected to Sepolia."
                     : "No batches match the current filter."}
                 </p>
               );
