@@ -56,6 +56,7 @@ export default function HomePage() {
   const [allBatches, setAllBatches] = useState<BatchSummary[]>([]);
   const [statusFilter, setStatusFilter] = useState<number | "all">("all");
   const [mineOnly, setMineOnly] = useState(false);
+  const [logsError, setLogsError] = useState<string>("");
 
   const batchId = useMemo(() => BigInt(batchIdInput || "0"), [batchIdInput]);
 
@@ -140,27 +141,36 @@ export default function HomePage() {
     }
   }, [transferOptions]);
 
+  // Fetch getLogs with a large range, falling back to a smaller one if the RPC rejects it.
+  async function fetchLogs(
+    client: NonNullable<typeof publicClient>,
+    params: Parameters<typeof client.getLogs>[0]
+  ) {
+    const latestBlock = await client.getBlockNumber();
+    for (const lookback of [100_000n, 50_000n, 10_000n]) {
+      try {
+        const fromBlock = latestBlock > lookback ? latestBlock - lookback : 0n;
+        return await client.getLogs({ ...params, fromBlock, toBlock: "latest" });
+      } catch {
+        // RPC rejected this range — try smaller
+      }
+    }
+    throw new Error("RPC rejected all block ranges. Try switching to a public Sepolia RPC in your wallet.");
+  }
+
   useEffect(() => {
     async function loadEvents() {
       if (!publicClient) return;
+      setLogsError("");
       try {
-        // Extract the event before getLogs so TypeScript sees a concrete AbiEvent
-        // (not AbiEvent | undefined). Only then does viem type log.args correctly.
         const batchUpdatedEvent = pharmaChainAbi.find(
           (item) => item.type === "event" && item.name === "BatchUpdated"
         )!;
 
-        // fromBlock: 0n causes free RPC providers to reject the request (range too large).
-        // Instead: go back 100 000 blocks from the latest — covers several days on Sepolia.
-        const latestBlock = await publicClient.getBlockNumber();
-        const fromBlock = latestBlock > 9_999n ? latestBlock - 9_999n : 0n;
-
-        const logs = await publicClient.getLogs({
+        const logs = await fetchLogs(publicClient, {
           address: pharmaChainAddress,
           event: batchUpdatedEvent,
           args: { batchId },
-          fromBlock,
-          toBlock: "latest",
         });
 
         const mapped = logs
@@ -176,6 +186,7 @@ export default function HomePage() {
         setEvents(mapped);
       } catch (err) {
         console.error("[pharma-chain] Failed to load batch events:", err);
+        setLogsError(err instanceof Error ? err.message : "Failed to load events.");
         setEvents([]);
       }
     }
@@ -190,14 +201,10 @@ export default function HomePage() {
         const batchUpdatedEvent = pharmaChainAbi.find(
           (item) => item.type === "event" && item.name === "BatchUpdated"
         )!;
-        const latestBlock = await publicClient.getBlockNumber();
-        const fromBlock = latestBlock > 9_999n ? latestBlock - 9_999n : 0n;
 
-        const logs = await publicClient.getLogs({
+        const logs = await fetchLogs(publicClient, {
           address: pharmaChainAddress,
           event: batchUpdatedEvent,
-          fromBlock,
-          toBlock: "latest",
         });
 
         // Keep only the latest event per batchId
@@ -563,8 +570,10 @@ export default function HomePage() {
           <h2 className="mb-5 text-xs font-semibold uppercase tracking-wide text-gray-400">
             Batch History Timeline
           </h2>
-          {events.length === 0 ? (
-            <p className="text-sm text-gray-400">No events found for this batch ID yet.</p>
+          {logsError ? (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{logsError}</p>
+          ) : events.length === 0 ? (
+            <p className="text-sm text-gray-400">No events found for this batch ID.</p>
           ) : (
             <ol className="relative ml-3 border-l-2 border-gray-100">
               {[...events].reverse().map((event, index) => {
